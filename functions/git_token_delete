@@ -1,0 +1,36 @@
+# =========================== > git_token_delete < =========================== #
+
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_token_delete`                                                     ││ #
+# ││                                                                        ││ #
+# ││ Delete one or multiple tokens based on their ids                       ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ The API output                                                         ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_token_delete                                                       ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_token_delete {
+    init_doc
+    init_desc \
+        "Delete one or multiple gitlab tokens based on their ids"
+
+    init_arg "int" "token_ids" "The ids of the tokens to be deleted" "1234"
+    init_arg "str" "url" "The url of of the project to delete a token from" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    # Delete all tokens with the entered ids
+    for token_id in "${token_ids[@]}"; do
+        echo "$(
+            git_api --curl_body "\
+                --request DELETE \
+                "$(git_repo_info --type api --url "${url}")access_tokens/${token_id}" \
+                "
+        )"
+    done
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

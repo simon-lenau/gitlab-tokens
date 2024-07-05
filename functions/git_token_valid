@@ -1,0 +1,57 @@
+# =========================== > git_token_valid < ============================ #
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_token_valid`                                                      ││ #
+# ││                                                                        ││ #
+# ││ Check whether a credential grants access                               ││ #
+# ││ to the repo's container registry                                       ││ #
+# ││                                                                        ││ #
+# ││ Input:                                                                 ││ #
+# ││ $1 : credential (string): The credential for accessing the registry    ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ 0 if login succeeds, else 1                                            ││ #
+# ││                                                                        ││ #
+# ││ Usage:                                                                 ││ #
+# ││ git_token_valid <credential>                                           ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_token_valid "glpat-aG2fJfixfGub6ULt2L5_"                           ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_token_valid {
+    init_doc
+    init_desc \
+        "Check validity of gitlab container registry token"
+    init_arg "str" "registry_token" "The registry token" "glpat-aG2fJfixfGub6ULt2L5_"
+
+    init_arg "str" "url" "The url to check the api token for" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    if [[ "${registry_token}" == "glpat-aG2fJfixfGub6ULt2L5_" ||
+        "${registry_token}" == "" ]]; then
+        local registry_token="$(read_non_blocking "$@")"
+    fi
+
+    # Use docker login if available
+    {
+        check_dependency --command "docker" > \
+            /dev/null 2>&1
+    } && {
+        git_token_valid_docker --registry_token "$registry_token" --url "${url}"
+        return $?
+    } ||
+        # Use enroot import if available
+        {
+            check_dependency --command "enroot" > \
+                /dev/null 2>&1
+        } && {
+        git_token_valid_enroot --registry_token "$registry_token" --url "${url}"
+        return $?
+    } || {
+        return 1
+    }
+
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

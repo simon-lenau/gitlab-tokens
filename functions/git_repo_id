@@ -1,0 +1,55 @@
+function git_repo_id {
+    init_doc
+    init_desc \
+        "Allow a job (CI) token from the current project to access another project's repo," \
+        "e.g. to clone the repo or access its container registry." \
+        "(Requires a token with API access to the \`url\` argument)."
+
+    init_arg "str" "url" \
+        "The project's url" \
+        "$(git_repo_info --type git_url)"
+
+    init_arg "str" "api_secret" "The API secret" "glpat-aG2fJfixfGub6ULt2L5_"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    if [[ "${api_secret}" == "glpat-aG2fJfixfGub6ULt2L5_" ||
+        "${api_secret}" == "" ]]; then
+        local api_secret="$(read_non_blocking "$@")"
+    fi
+
+    # If no secret is provided to this function, try using the one from parent shell
+    if [[ "${api_secret}" == "glpat-aG2fJfixfGub6ULt2L5_" ||
+        "${api_secret}" == "" ]]; then
+        api_secret="${__gitlab_api_secret__}"
+    fi
+
+    # Do this in subshell to protect the secret
+    {
+        echo "$(
+            { # Set API secret
+                git_api_secret_set --api_secret="${api_secret}" --url="${url}"
+            } || {
+                err "Failed to set API secret"
+                return 1
+            }
+            # Retrieve project data
+            echo "$(
+                git_api \
+                    --curl_body \
+                    "$(
+                        git_repo_info \
+                            --type api \
+                            --url "$url"
+                    )" |
+                    # Extract project id
+                    jq ".id"
+            )"
+        )"
+        return $?
+    } || {
+        return 1
+    }
+}

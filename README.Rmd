@@ -1,0 +1,106 @@
+---
+title: gitlab-tokens
+output:
+  github_document
+---
+
+```{r, echo=FALSE,include=FALSE}
+# Make sure colors from tput are used correctly in the output
+options(crayon.enabled = TRUE)
+knitr::knit_hooks$set(output = function(x, options) {
+  paste0(
+  #   "<svg fill=\"none\" viewBox=\"0 0 600 300\" width=\"600\" height=\"300\" xmlns=\"http://www.w3.org/2000/svg\">",
+  # "<foreignObject width=\"100%\" height=\"100%\">",
+    '<pre class="r-output">',
+    paste0(
+      "<code>",
+      paste0(
+        fansi::to_html(
+          x =
+            htmltools::htmlEscape(x),
+          warn = FALSE,
+          carry = FALSE
+        ),
+        collapse = "  \n"
+      ),
+      "</code>",
+      collapse = "\n"
+    ),
+    "</pre>"
+    # "</foreignObject>",
+# "</svg>"
+  )
+})
+num_colors <- function(forget = TRUE) 256
+library(crayon)
+assignInNamespace("num_colors", num_colors, pos = "package:crayon")
+Sys.setenv("TERM" = "dumb")
+
+print_help <-
+  function(x) {
+    cat(
+      system(
+        paste0(
+          "/opt/homebrew/bin/bash -c \"source ./gitlab-tokens-init && ",
+      x,
+      " --help\""
+      ), 
+      intern = TRUE),
+      sep =
+        "\n"
+    )
+  }
+```
+
+Utilities to create and modify Gitlab project access tokens from bash:
+
+- create, rotate and revoke access tokens
+- grant and revoke cross-repository CI job token permissions
+
+# Core functions
+
+## git_repo_info
+```{r, eval=TRUE, echo=FALSE,include=TRUE,comment=""}
+print_help("git_repo_info")
+```
+
+## git_token_renew
+```{r, eval=TRUE, echo=FALSE,include=TRUE,comment=""}
+print_help("git_token_renew")
+```
+
+## git_token_access
+```{r, eval=TRUE, echo=FALSE,include=TRUE,comment=""}
+print_help("git_token_access")
+```
+
+# Examples
+
+```{r, echo=FALSE,include=FALSE}
+knitr::knit_hooks$set(output = function(x, options) {
+  c(
+    '```bash',
+    paste0(
+      paste0(
+        x,
+        collapse = " \n"
+      ),
+      collapse = "\n"
+    ),
+    "```"
+  )
+})
+  ```
+
+## Simple example
+
+```{bash example_simple,echo=FALSE,comment=NA,error=TRUE}
+cat "examples/simple_example.sh"
+```
+
+## More extensive example 
+
+
+```{bash example_extensive,echo=FALSE,comment=NA,error=TRUE}
+cat "examples/extensive_example.sh"
+```

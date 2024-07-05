@@ -1,0 +1,6 @@
+[submodule "submodules/bash-doc"]
+	path = submodules/bash-doc
+	url = https://github.com/simon-lenau/bash-doc
+[submodule "submodules/bash-aux"]
+	path = submodules/bash-aux
+	url = git@github.com:simon-lenau/bash-aux.git

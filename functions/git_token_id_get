@@ -1,0 +1,72 @@
+# =========================== > git_token_id_get < =========================== #
+
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_token_id_get`                                                     ││ #
+# ││                                                                        ││ #
+# ││ Retrieve latest token matching the output pattern of `token_name`      ││ #
+# ││ As a side-effect, all tokens except the last one matching that pattern ││ #
+# ││ are deleted                                                            ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ token_id                                                               ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_token_id_get                                                       ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_token_id_get {
+    init_doc
+    init_desc \
+        "Retrieve id of latest token matching the output pattern of $(token_name)," \
+        "delete all other tokens matching that pattern"
+
+    init_arg "str" "url" "The url of of the project to get a token id from" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    # Retrieve all tokens
+    tokens="$(
+        git_api --curl_body \
+            "$(git_repo_info --type api --url "${url}")access_tokens"
+    )"
+
+    if [[ -z ${tokens} ]]; then
+        return 0
+    fi
+
+    if (echo "${tokens}" | grep -iq "^not found$"); then
+        return 0
+    fi
+
+    # Identify token(s) that match the pattern returned by git_token_name,
+    # but are not revoked yet (required to exclude previous versions of a token
+    # that has been rotated)
+    regex_pattern="$(
+        token_name --content "<content>" | sed \
+            -e 's/<content>/\.*/g'
+    )"
+
+    token_ids=$(
+        echo "$tokens" |
+            jq --arg pattern "${regex_pattern}" -r "$(
+                printf "%s" \
+                    '.[]' \
+                    '|' \
+                    'select(.name | test($pattern))' \
+                    '|' \
+                    'select(.active)' \
+                    '|' \
+                    'select(.revoked | not)' \
+                    '|' \
+                    '.id'
+            )"
+    )
+
+    # Delete all tokens except the latest one
+    if [ "$(echo "$token_ids" | jq -s 'length')" -gt 1 ]; then
+        git_token_delete --url "${url}" --token_ids "$(echo "$token_ids" | head -n -1)" >>git_token_delete.txt
+    fi
+    echo "$(echo "${token_ids}" | tail -n 1)"
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

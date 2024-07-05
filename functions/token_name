@@ -1,0 +1,17 @@
+# ============================== > token_name < ============================== #
+
+function token_name {
+    init_doc
+    init_desc \
+        "Create standardized git token name"
+    init_arg "str" "content" \
+        "additional information included in the name" \
+        "$(date '+%Y-%m-%d_%H:%M:%S')"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+    echo "__AUTO_TOKEN_${USER}@${HOST}${HOSTNAME}_${content}__"
+}
+
+# ────────────────────────────────── <end> ─────────────────────────────────── #

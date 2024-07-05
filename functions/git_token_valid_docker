@@ -1,0 +1,45 @@
+# ======================== > git_token_valid_docker < ======================== #
+
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_token_valid_docker`                                               ││ #
+# ││                                                                        ││ #
+# ││ Check whether a credential grants access                               ││ #
+# ││ to the repo's container registry via `docker login`                    ││ #
+# ││                                                                        ││ #
+# ││ Input:                                                                 ││ #
+# ││ $1 : credential (string): The credential for accessing the registry    ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ 0 if login succeeds, else 1                                            ││ #
+# ││                                                                        ││ #
+# ││ Usage:                                                                 ││ #
+# ││ git_token_valid_docker <credential>                                    ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_token_valid_docker "glpat-aG2fJfixfGub6ULt2L5_"                    ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_token_valid_docker {
+    init_doc
+    init_desc \
+        "Check validity of gitlab container registry token using \`docker login\`"
+    init_arg "str" "registry_token" "The registry token" "glpat-aG2fJfixfGub6ULt2L5_"
+    init_arg "str" "url" "The url of of the project to check a token for" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    if [ ! -z ${registry_token} ]; then
+        echo "${registry_token}" |
+            docker login \
+                --username "__docker_token_valid_$(date '+%Y-%m-%d_%H-%M-%S')__" \
+                --password-stdin \
+                "$(git_repo_info --type "registry" --url "${url}")" \
+                > \
+                /dev/null 2>&1
+        return $?
+    else
+        return 1
+    fi
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

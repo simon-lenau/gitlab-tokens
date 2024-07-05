@@ -1,0 +1,25 @@
+# =============================== > git_api < ================================ #
+
+function git_api {
+    init_doc
+    init_desc \
+        "Access gitlab API via curl"
+    init_arg "str" "curl_body" \
+        "The body of the curl command" \
+        "\$(git_repo_info --type api)access_tokens"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    curl \
+        --silent \
+        --header "PRIVATE-TOKEN: ${__gitlab_api_secret__}" \
+        "${curl_body[@]:0:${#curl_body[@]}-1}" \
+        "${__gitlab_api_url__}${curl_body[${#a[curl_body]}-1]}"
+    # "${curl_body[@]}"
+
+    return 0
+
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

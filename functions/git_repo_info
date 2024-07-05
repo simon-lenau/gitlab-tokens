@@ -1,0 +1,81 @@
+# ============================ > git_repo_info < ============================= #
+
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_repo_info`                                                        ││ #
+# ││                                                                        ││ #
+# ││ Obtain relevant information about the repo this script is called from  ││ #
+# ││                                                                        ││ #
+# ││ Input:                                                                 ││ #
+# ││ $1 : type (string): The type of information to be returned. One of:    ││ #
+# ││ host / owner / project / git_url / registry / api                      ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ The requested information as string                                    ││ #
+# ││                                                                        ││ #
+# ││ Usage:                                                                 ││ #
+# ││ git_repo_info <type>                                                   ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_repo_info "registry"                                               ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_repo_info {
+    init_doc
+    init_desc \
+        "Return information about the current git project"
+    init_arg "str" "type" "The requested type of information about the repo" "api"
+    init_arg "str" "url" "The url to obtain the requested info from" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    # Replace the protocol / git@ and .git at begin / end of URL
+    # and replace all / or : with ; (to split the string)
+    # echo "CURRENT URL: >>$url<<"
+    local repo_info=$(
+        echo "${url}" |
+            sed \
+                -e 's/\.git$//g' \
+                -e 's/^.*@//g' \
+                -e 's/^.*[\/]\{2,\}//g' \
+                -e 's/[\/:]/;/g'
+    )
+
+
+    # Obtain the git instance, user, and project
+    local host=$(echo "${repo_info}" | awk -F\[\;\] '{print $1}')
+    local owner=$(echo "${repo_info}" | awk -F\[\;\] '{print $2}')
+    local proj=$(echo "${repo_info}" | awk -F\[\;\] '{print $3}')
+
+    shopt -s nocasematch
+    # Format output according to requested info
+    if [[ ${type} == "host" ]]; then
+        # The host / gitlab instance
+        echo "${host}"
+    elif [[ ${type} == "owner" ]]; then
+        # The repo's owner
+        echo ${owner}
+    elif [[ ${type} == "project" ]]; then
+        # The repo's name
+        echo ${proj}
+    elif [[ ${type} == "git_url" ]]; then
+        # The repo's git url
+        echo "git@${host}/${owner}/${proj}.git"
+    elif [[ ${type} == "url" ]]; then
+        # The repo's url
+        echo "${host}/${owner}/${proj}"
+    elif [[ ${type} == "registry" ]]; then
+        # The repo's registry
+        echo "${host}:${git_registry_port}#${owner}/${proj}/"
+    elif [[ ${type} == "api" ]]; then
+        # The repo's API project endpoint
+        echo "https://${host}/api/v${gitlab_api_version}/projects/${owner}%2F${proj}/"
+    else
+        err "Invalid argument \`type\`: $type"
+        return 1
+    fi
+    shopt -u nocasematch
+    return 0
+}
+
+# ────────────────────────────────── <end> ─────────────────────────────────── #

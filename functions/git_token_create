@@ -1,0 +1,59 @@
+# =========================== > git_token_create < =========================== #
+# ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+# ││ `git_token_create`                                                     ││ #
+# ││                                                                        ││ #
+# ││ Create a new project access token                                      ││ #
+# ││                                                                        ││ #
+# ││ Output:                                                                ││ #
+# ││ null                                                                   ││ #
+# ││                                                                        ││ #
+# ││ Examples:                                                              ││ #
+# ││ git_token_create                                                       ││ #
+# └└────────────────────────────────────────────────────────────────────────┘┘ #
+function git_token_create {
+    init_doc
+    init_desc \
+        "Create a token for accessing gitlab repo + container registry"
+
+    init_arg "str" "token_duration" "The expiry duration of the token" "1 day"
+    init_arg "array" "token_scopes" "The token scopes" "read_repository"
+    init_arg "str" "url" "The url of of the project to create a token for" "$(git config --get remote.origin.url)"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+    # ========================== > Check token scopes < ========================== #
+    check_arguments token_scopes \
+        "api" \
+        "read_api" \
+        "read_registry" \
+        "write_registry" \
+        "read_repository" \
+        "write_repository" \
+        "create_runner" \
+        "manage_runner" \
+        "ai_features" \
+        "k8s_proxy"
+
+    token_scopes_curl="$(printf " --data-urlencode scopes[]=%s " "${token_scopes[@]}")"
+    # ────────────────────────────────── <end> ─────────────────────────────────── #
+
+    token_duration="$(printf "%s " "${token_duration[@]}")"
+
+    local token_infos="$(date '+%Y-%m-%d_%H:%M:%S')"
+    local expiry_date=$(date -d "${token_duration}" "+%Y-%m-%d") || return $?
+
+    output="$(
+        git_api --curl_body "\
+            --request POST \
+            --data-urlencode "name=$(token_name --content ${token_infos})" \
+            ${token_scopes_curl} \
+            --data-urlencode "expires_at=${expiry_date}" \
+            --data-urlencode "access_level=30" \
+            "$(git_repo_info --type api --url "${url}")access_tokens" \
+            "
+    )"
+
+    echo "${output}"
+}
+# ────────────────────────────────── <end> ─────────────────────────────────── #

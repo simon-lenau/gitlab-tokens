@@ -1,0 +1,220 @@
+function git_token_access {
+    local git_host="$(git_repo_info --type host)"
+    local git_owner="$(git_repo_info --type owner)"
+    local git_proj="$(git_repo_info --type project)"
+    # ====================== > Arguments & Documentation < ======================= #
+
+    init_doc
+    init_desc \
+        "Allow a job (CI) token from the current project to access another project's repo," \
+        "e.g. to clone the repo or access its container registry." \
+        "(Requires a token with API access)."
+
+    init_arg \
+        "str" \
+        "from_project" \
+        "Project whichs job tokens should be able to access \`to_project\`
+         Must be on the same host (e.g. $git_host) as \`to_project\`." \
+        "$git_owner/$git_proj"
+
+    init_arg \
+        "str" \
+        "to_project" \
+        "Project which should be accessible using \`from_project\`s job token.
+         Must be on the same host (e.g. $git_host) as \`from_project\`." \
+        "$git_owner/$git_proj"
+
+    init_arg \
+        "str" \
+        "action" \
+        "Action to perform. Either 'grant' or 'revoke'
+         to add or revoke access from \`from_project\` to \`to_project\`" \
+        "grant"
+
+    init_arg "str" "url" "The url of either \`from_project\` or \`to_project\`" "$(git config --get remote.origin.url)"
+
+    init_arg "str" "api_secret" "The API secret" "glpat-aG2fJfixfGub6ULt2L5_"
+
+    need_help $@ && return $?
+
+    eval "$(parse_arguments "$@")"
+
+    if [[ "${api_secret}" == "glpat-aG2fJfixfGub6ULt2L5_" ||
+        "${api_secret}" == "" ]]; then
+        local api_secret="$(read_non_blocking "$@")"
+    fi
+    # ────────────────────────────────── <end> ─────────────────────────────────── #
+
+    # ========================= > Argument Validation < ========================== #
+
+    if [[ ! "${action}" =~ ^(grant|revoke)$ ]]; then
+        err "Invalid value for argument \`action\`: '${action}'." \
+            "Should be 'grant' or 'revoke'."
+        return 1
+    fi
+
+    if [ -z ${to_project} ]; then
+        err "Argument \`to_project\` should not be empty."
+        return 1
+    fi
+
+    if [ -z ${from_project} ]; then
+        err "Argument \`from_project\` should not be empty."
+        return 1
+    fi
+
+    if [[ "${from_project}" == "${to_project} " ]]; then
+        err \
+            "Arguments \`to_project\` and \`from_project\` should be distinct." \
+            "Job tokens do have access to their own repo anyway."
+        return 1
+    fi
+
+    git_host="$(git_repo_info --type "host" --url "${url}")"
+
+    if [[ ! "${to_project}" =~ ${git_host} ]]; then
+        local to_project="${git_host}/$to_project"
+    fi
+
+    if [[ ! "${from_project}" =~ ${git_host} ]]; then
+        local from_project="${git_host}/$from_project"
+    fi
+
+    local to_host="$(
+        git_repo_info \
+            --type host \
+            --url "$to_project"
+    )"
+
+    local from_host="$(
+        git_repo_info \
+            --type host \
+            --url "$to_project"
+    )"
+
+    if [[ ! "${from_host}" == "${to_host}" ]]; then
+        err \
+            "\`from_project\`s host ($from_host) and \`to_project\`s host ($to_host) should be the same."
+        return 1
+    fi
+
+    # ────────────────────────────────── <end> ─────────────────────────────────── #
+
+    # If no secret is provided to this function, try using the one from parent shell
+    if [[ "${api_secret}" == "glpat-aG2fJfixfGub6ULt2L5_" ||
+        "${api_secret}" == "" ]]; then
+        api_secret="${__gitlab_api_secret__}"
+    fi
+
+    # Do this in subshell to protect the secret
+    $(
+        # ============================ > Set API secret < ============================ #
+        { # Set API secret
+            git_api_secret_set --api_secret="${api_secret}" --url="${url}"
+        } || {
+            err "Failed to set API secret -- skipping \`git_token_access\`!"
+            return 1
+        }
+        # ────────────────────────────────── <end> ─────────────────────────────────── #
+
+        # ======================= > Project ID determination < ======================= #
+
+        # ┌┌────────────────────────────────────────────────────────────────────────┐┐ #
+        # ││ currently, the API endpoint does not work using project names          ││ #
+        # └└────────────────────────────────────────────────────────────────────────┘┘ #
+
+        local to_id="$(git_repo_id --url="${to_project}")"
+        local from_id="$(git_repo_id --url="${from_project}")"
+
+        if [[ "${to_id}" == "null" ]]; then
+            err \
+                "Could not determine ID of \`to_project\`. Does the following repo exist?" \
+                "$to_project"
+            return 1
+        fi
+
+        if [[ "${from_id}" == "null" ]]; then
+            err \
+                "Could not determine ID of \`from_project\`. Does the following repo exist?" \
+                "$from_project"
+            return 1
+        fi
+        # ────────────────────────────────── <end> ─────────────────────────────────── #
+        # ======================== > Determine endpoint url < ======================== #
+        endpoint_url="$(
+            printf "%s/" \
+                "https://${to_host}/api" \
+                "v${gitlab_api_version}" \
+                "projects/${to_id}/job_token_scope/allowlist"
+        )"
+        # ────────────────────────────────── <end> ─────────────────────────────────── #
+        # ============================= > Grant access < ============================= #
+
+        if [[ "${action}" == "grant" ]]; then
+            result="$(
+                curl -s \
+                    --request POST \
+                    --header 'Content-Type: application/json' \
+                    --header "PRIVATE-TOKEN: ${__gitlab_api_secret__}" \
+                    --data "{\"target_project_id\": ${from_id} }" \
+                    --url "${endpoint_url}/"
+            )"
+
+            retval="$?"
+
+            if [[ ! "${result}" =~ "Target project is already in the job token scope" ]]; then
+                check_from_id="$(
+                    echo "$result" |
+                        jq '.target_project_id'
+                )"
+                check_to_id="$(
+                    echo "$result" |
+                        jq '.source_project_id'
+                )"
+                if [[ "${check_from_id}" == "${from_id}" &&
+                    "${check_to_id}" == "${to_id}" ]]; then
+                    :
+                else
+                    err "Granting access from" \
+                        "'$from_project'" \
+                        "to" \
+                        "'$to_project'" \
+                        "failed: " \
+                        "$result"
+                    return 1
+                fi
+            fi
+        fi
+        # ────────────────────────────────── <end> ─────────────────────────────────── #
+        # ============================ > Revoke access < ============================= #
+
+        if [[ "${action}" == "revoke" ]]; then
+            result="$(
+                curl -s \
+                    --request DELETE \
+                    --header "PRIVATE-TOKEN: ${__gitlab_api_secret__}" \
+                    --url "${endpoint_url}/${from_id}"
+            )"
+            retval="$?"
+
+            if [[ "${result}" != "" &&
+                ! "${result}" =~ "Target project is not in the job token scope" ]]; then
+                err "Revoking access from" \
+                    "'$from_project'" \
+                    "to" \
+                    "'$to_project'" \
+                    "failed: " \
+                    "$result"
+                return 1
+            fi
+        fi
+        # ────────────────────────────────── <end> ─────────────────────────────────── #
+        if [ "$retval" -ne 0 ]; then
+            err "Curl request failed:" \
+                "$result"
+            return $retval
+        else
+            return 0
+        fi
+    )
+}
